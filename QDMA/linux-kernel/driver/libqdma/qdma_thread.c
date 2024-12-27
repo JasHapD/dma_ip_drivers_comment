@@ -59,8 +59,9 @@ static int qdma_thread_cmpl_status_pend(struct list_head *work_item)
 static int qdma_thread_cmpl_status_proc(struct list_head *work_item)
 {
 	struct qdma_descq *descq;
-
-	descq = list_entry(work_item, struct qdma_descq, cmplthp_list);
+	//实际为container_of，work_item为descq中的成员，qdma_descq为结构体类型，
+	//cmplthp_list为结构体成员名字，返回descq结构体起始地址
+	descq = list_entry(work_item, struct qdma_descq, cmplthp_list); 
 	qdma_descq_service_cmpl_update(descq, 0, 1);
 	return 0;
 }

@@ -788,6 +788,11 @@ int qdma_cdev_init(void)
 		return -ENODEV;
 	}
 	/* using kmem_cache_create to enable sequential cleanup */
+	/*
+	  使用 kmem_cache_create 创建一个 slab 缓存，名称为 "cdev_cache"。
+	  每个缓存对象的大小为 sizeof(struct cdev_async_io)，用于异步 I/O 操作。
+	  SLAB_HWCACHE_ALIGN 确保缓存对象与硬件缓存对齐，提升性能。
+	*/
 	cdev_cache = kmem_cache_create("cdev_cache",
 					sizeof(struct cdev_async_io),
 					0,

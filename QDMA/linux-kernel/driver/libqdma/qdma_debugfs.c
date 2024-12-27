@@ -30,6 +30,12 @@
  * @return	0: success
  * @return	<0: error
  *****************************************************************************/
+/*
+  该函数 qdma_debugfs_init 的作用是创建一个目录节点，用于调试文件系统（debugfs）
+  的初始化。在 Linux 内核中，debugfs 是一种特殊的文件系统，主要用于调试目的，
+  开发人员可以通过它访问内核中的调试信息。
+  /sys/kernel/debug/ 路径下创建名为 qdma-pf 或 qdma-vf 的目录
+*/
 int qdma_debugfs_init(struct dentry **qdma_debugfs_root)
 {
 	struct dentry *debugfs_root = NULL;

@@ -29,7 +29,10 @@
  * list of pcie devices supported for qdma driver
  */
 static const struct pci_device_id pci_ids[] = {
-
+/*
+	厂商ID，设备ID
+  设备 ID 的最后一位数字代表 PCIe 通道的宽度
+*/
 #ifdef __QDMA_VF__
 	/** Gen 1 VF */
 	/** PCIe lane width x1 */

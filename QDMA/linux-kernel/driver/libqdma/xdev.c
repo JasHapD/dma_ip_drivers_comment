@@ -1017,7 +1017,7 @@ int qdma_device_open(const char *mod_name, struct qdma_dev_conf *conf,
 	}
 
 #ifndef __XRT__
-	rv = pci_request_regions(pdev, mod_name);
+	rv = pci_request_regions(pdev, mod_name); //申请 PCI 设备的内存和 I/O 资源，确保设备不会被其他驱动程序占用。
 	if (rv) {
 		/* Just info, some other driver may have claimed the device. */
 		dev_info(&pdev->dev, "cannot obtain PCI resources\n");
@@ -1031,6 +1031,12 @@ int qdma_device_open(const char *mod_name, struct qdma_dev_conf *conf,
 		goto release_regions;
 	}
 
+/*
+	启用 PCI 设备并设置基本特性：
+	relaxed ordering：优化事务顺序以提高性能。
+	extended tag：支持更大的事务队列。
+	bus master：允许设备发起 DMA 传输。
+*/
 	/* enable relaxed ordering */
 	pci_enable_relaxed_ordering(pdev);
 
@@ -1040,7 +1046,7 @@ int qdma_device_open(const char *mod_name, struct qdma_dev_conf *conf,
 	/* enable bus master capability */
 	pci_set_master(pdev);
 
-	rv = pci_dma_mask_set(pdev);
+	rv = pci_dma_mask_set(pdev); //设置 DMA 的掩码，确保设备支持合适的地址范围。
 	if (rv) {
 		pr_err("Failed to set the dma mask");
 		goto disable_device;
@@ -1067,7 +1073,7 @@ int qdma_device_open(const char *mod_name, struct qdma_dev_conf *conf,
 	xdev->conf.name[rv] = '\0';
 
 	/* Mapping bars */
-	rv = xdev_map_bars(xdev, pdev);
+	rv = xdev_map_bars(xdev, pdev); //将设备的 BAR（基址寄存器）映射到内存空间，以便访问设备寄存器
 	if (rv) {
 		pr_err("Failed to map the bars");
 		goto unmap_bars;
@@ -1169,7 +1175,7 @@ int qdma_device_open(const char *mod_name, struct qdma_dev_conf *conf,
 		dev_err(&pdev->dev, "Legacy mode interrupts are not supported\n");
 		goto unmap_bars;
 	}
-
+	//将设备状态设置为“在线”，准备好处理数据传输。
 	rv = qdma_device_online(pdev, (unsigned long)xdev, XDEV_FLR_INACTIVE);
 	if (rv < 0) {
 		pr_warn("Failed to set the dma device  online, err = %d", rv);

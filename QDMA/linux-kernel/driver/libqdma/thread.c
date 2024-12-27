@@ -72,10 +72,10 @@ static inline void xthread_reschedule(struct qdma_kthread *thp)
 				thp->name, thp->kth_timeout);
 		qdma_waitq_wait_event_timeout(
 				thp->waitq, thp->schedule,
-				msecs_to_jiffies(thp->kth_timeout));
+				msecs_to_jiffies(thp->kth_timeout));//msecs_to_jiffies(thp->kth_timeout): 超时时间，单位为内核节拍
 	} else {
 		pr_debug_thread("%s rescheduling", thp->name);
-		qdma_waitq_wait_event(thp->waitq, thp->schedule);
+		qdma_waitq_wait_event(thp->waitq, thp->schedule);//不带超时机制的等待队列操作，线程会一直挂起直到条件满足
 	}
 }
 
@@ -85,28 +85,34 @@ static int xthread_main(void *data)
 
 	pr_debug_thread("%s UP.\n", thp->name);
 
+	//禁止 SIGPIPE 信号，防止写入关闭的管道或套接字导致崩溃。
 	disallow_signal(SIGPIPE);
 
-	if (thp->finit)
-		thp->finit(thp);
+	if (thp->finit)//好像没有自定义这个函数
+		thp->finit(thp);//调用用户定义的初始化回调函数，用于线程的定制初始化逻辑
 
 
-	while (!kthread_should_stop()) {
+	while (!kthread_should_stop()) {//检查是否收到线程停止请求。如果收到信号，则退出循环
 
 		struct list_head *work_item, *next;
 
 		pr_debug_thread("%s interruptible\n", thp->name);
 
 		/* any work to do? */
-		lock_thread(thp);
-		if (!xthread_work_pending(thp)) {
+		lock_thread(thp);	//自旋锁用于保护线程的共享资源，避免并发问题。
+		if (!xthread_work_pending(thp)) {//没有work待完成
 			unlock_thread(thp);
-			xthread_reschedule(thp);
+			xthread_reschedule(thp);//将线程置于休眠或等待状态，减少资源占用
+			/*
+			如果没有任务 (xthread_work_pending 返回 false)，
+			解锁线程后调用 xthread_reschedule，将线程置于休眠或
+			等待状态。等待有新的任务到来后，重新加锁以继续检查队列。
+			*/
 			lock_thread(thp);
 		}
 		thp->schedule = 0;
 
-		if (thp->work_cnt) {
+		if (thp->work_cnt) {//当前挂起任务的计数
 			pr_debug_thread("%s processing %u work items\n",
 					thp->name, thp->work_cnt);
 			/* do work */
@@ -114,8 +120,8 @@ static int xthread_main(void *data)
 				thp->fproc(work_item);
 			}
 		}
-		unlock_thread(thp);
-		schedule();
+		unlock_thread(thp);//释放锁，允许其他线程访问共享资源
+		schedule();//主动让出 CPU 时间片，等待下一次调度
 	}
 
 	pr_debug_thread("%s, work done.\n", thp->name);
@@ -148,10 +154,11 @@ int qdma_kthread_start(struct qdma_kthread *thp, char *name, int id)
 #endif
 	thp->id = id;
 
-	spin_lock_init(&thp->lock);
-	INIT_LIST_HEAD(&thp->work_list);
-	qdma_waitq_init(&thp->waitq);
+	spin_lock_init(&thp->lock);	//初始化自旋锁，用于线程同步
+	INIT_LIST_HEAD(&thp->work_list); //初始化工作队列 work_list，用于存储待处理任务
+	qdma_waitq_init(&thp->waitq);  //初始化等待队列，线程会在需要时进入等待状态
 
+	//创建内核线程并分配到指定 NUMA 节点上, xthread_main为线程主函数
 	thp->task = kthread_create_on_node(xthread_main, (void *)thp,
 					cpu_to_node(thp->cpu), "%s", thp->name);
 	if (IS_ERR(thp->task)) {
@@ -161,11 +168,13 @@ int qdma_kthread_start(struct qdma_kthread *thp, char *name, int id)
 		return -EFAULT;
 	}
 
+	//将线程绑定到特定 CPU，确保线程只在指定的 CPU 上运行
 	kthread_bind(thp->task, thp->cpu);
 
 	pr_debug_thread("kthread 0x%p, %s, cpu %u, task 0x%p.\n",
 		thp, thp->name, thp->cpu, thp->task);
-
+	
+	//唤醒刚刚创建的线程，让它开始执行主函数
 	wake_up_process(thp->task);
 	return 0;
 }

@@ -552,6 +552,11 @@ static int pci_msix_vec_count(struct pci_dev *dev)
 }
 #endif
 
+
+/*
+  用于在设备驱动程序中设置中断。它的核心任务是初始化 MSI-X（Message Signaled Interrupts 
+  Extended）中断向量，并将这些中断与相应的中断处理程序绑定。
+*/
 int intr_setup(struct xlnx_dma_dev *xdev)
 {
 	int rv = 0;
@@ -561,12 +566,20 @@ int intr_setup(struct xlnx_dma_dev *xdev)
 #ifndef USER_INTERRUPT_DISABLE
 	int intr_count = 0;
 #endif
-
+/*
+  如果驱动模式为 轮询模式（POLL_MODE）或 传统中断模式（LEGACY_INTR_MODE），
+  跳过中断设置直接退出。
+  这些模式下不需要设置 MSI-X 中断。
+*/
 	if ((xdev->conf.qdma_drv_mode == POLL_MODE) ||
 			(xdev->conf.qdma_drv_mode == LEGACY_INTR_MODE)) {
 		goto exit;
 	}
-	num_vecs = pci_msix_vec_count(xdev->conf.pdev);
+	/*
+	使用 pci_msix_vec_count 获取设备支持的 MSI-X 向量数。
+	如果返回值为 0，说明设备不支持 MSI-X，则记录警告并切换到轮询模式。
+    */
+	num_vecs = pci_msix_vec_count(xdev->conf.pdev); //Jasper:这个函数是不是读取的配置空间
 	pr_debug("dev %s, xdev->num_vecs = %d\n",
 			dev_name(&xdev->conf.pdev->dev), xdev->num_vecs);
 
@@ -616,7 +629,7 @@ int intr_setup(struct xlnx_dma_dev *xdev)
 	}
 
 	xdev->msix = kzalloc((sizeof(struct msix_entry) * xdev->num_vecs),
-						GFP_KERNEL);
+						GFP_KERNEL);//Jasper:GFP_KERNEL参数含义 为何此处选用这个函数
 	if (!xdev->msix) {
 		pr_err("dev %s xdev->msix OOM.\n",
 			dev_name(&xdev->conf.pdev->dev));
@@ -640,10 +653,11 @@ int intr_setup(struct xlnx_dma_dev *xdev)
 		spin_lock_init(&xdev->dev_intr_info_list[i].vec_q_list);
 	}
 
+	//启用MSI_X中断
 #if KERNEL_VERSION(4, 12, 0) <= LINUX_VERSION_CODE
 	rv = pci_enable_msix_exact(xdev->conf.pdev, xdev->msix, xdev->num_vecs);
 #else
-	rv = pci_enable_msix(xdev->conf.pdev, xdev->msix, xdev->num_vecs);
+	rv = pci_enable_msix(xdev->conf.pdev, xdev->msix, xdev->num_vecs);//Jasper:这两个函数需要看看
 #endif
 	if (rv < 0) {
 		pr_err("Error enabling MSI-X (%d)\n", rv);
@@ -669,7 +683,7 @@ int intr_setup(struct xlnx_dma_dev *xdev)
 #endif
 
 #ifndef USER_INTERRUPT_DISABLE
-	for (intr_count = 0;
+	for (intr_count = 0;//循环为每个用户中断绑定处理程序
 		intr_count < xdev->conf.user_msix_qvec_max;
 		intr_count++) {
 		/* user interrupt */
@@ -683,7 +697,7 @@ int intr_setup(struct xlnx_dma_dev *xdev)
 
 #ifndef __QDMA_VF__
 	/* global error interrupt */
-	if (xdev->conf.master_pf) {
+	if (xdev->conf.master_pf) { //如果设备是主功能（PF），为错误中断绑定处理程序
 		rv = intr_vector_setup(xdev, i, INTR_TYPE_ERROR,
 				error_intr_handler);
 		if (rv)
@@ -693,7 +707,7 @@ int intr_setup(struct xlnx_dma_dev *xdev)
 #endif
 
 	/* data interrupt */
-	xdev->dvec_start_idx = i;
+	xdev->dvec_start_idx = i; //剩余的中断向量用于数据中断，绑定相应的处理程序。
 	for (; i < xdev->num_vecs; i++) {
 		rv = intr_vector_setup(xdev, i, INTR_TYPE_DATA,
 					data_intr_handler);

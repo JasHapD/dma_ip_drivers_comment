@@ -407,7 +407,17 @@ static inline int xlnx_dma_device_flag_test_n_set(struct xlnx_dma_dev *xdev,
 static inline void xdev_flag_set(struct xlnx_dma_dev *xdev, unsigned int f)
 {
 	unsigned long flags;
+	//加锁修改共享变量:使用 spin_lock_irqsave 和 spin_unlock_irqrestore，确保在中断上下文或多核情况下修改共享变量时的安全性。
+	/*
+	spin_lock_irqsave:
+	锁定自旋锁 xdev->lock，并保存当前 CPU 的中断状态到 flags。
+	如果中断已开启，则禁用中断，避免中断处理程序和当前线程同时访问共享资源。
 
+	spin_unlock_irqrestore:
+	解锁自旋锁 xdev->lock。
+	恢复之前保存的中断状态，保证系统的中断行为不受影响。
+	Jasper:没有搞明白为什么要用spin_lock_irqsave，而不是spin_lock
+	*/
 	spin_lock_irqsave(&xdev->lock, flags);
 	xdev->flags |= f;
 	spin_unlock_irqrestore(&xdev->lock, flags);

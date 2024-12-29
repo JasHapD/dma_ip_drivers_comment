@@ -510,10 +510,17 @@ static int xdev_map_bars(struct xlnx_dma_dev *xdev, struct pci_dev *pdev)
 {
 	int map_len;
 
+	/*
+	这个函数调用用于获取指定 BAR 的资源长度。pdev 是 PCI 设备，bar_num_config 
+	是设备配置中指定的 BAR 索引。pci_resource_len 返回该 BAR 对应的资源大小。
+	*/
 	map_len = pci_resource_len(pdev, (int)xdev->conf.bar_num_config);
 	if (map_len > QDMA_MAX_BAR_LEN_MAPPED)
 		map_len = QDMA_MAX_BAR_LEN_MAPPED;
-
+	/*
+	pci_iomap 是将设备的 BAR 区域映射到内存地址空间，返回映射后的虚拟地址，并赋值给 xdev->regs。
+	pdev 是要映射的 PCI 设备，bar_num_config 是要映射的 BAR 索引，map_len 是映射的长度。
+	*/
 	xdev->regs = pci_iomap(pdev, xdev->conf.bar_num_config, map_len);
 	if (!xdev->regs ||
 		map_len < QDMA_MIN_BAR_LEN_MAPPED) {
@@ -857,10 +864,10 @@ int qdma_device_online(struct pci_dev *pdev, unsigned long dev_hndl, int reset)
 #endif
 
 	if (xdev->conf.qdma_drv_mode != POLL_MODE &&
-			xdev->conf.qdma_drv_mode != LEGACY_INTR_MODE) {
+			xdev->conf.qdma_drv_mode != LEGACY_INTR_MODE) { //中断模式OR AUTO模式？
 
 		if ((xdev->flags & XDEV_FLAG_IRQ) == 0x0) {
-			rv = intr_setup(xdev);
+			rv = intr_setup(xdev);	//初始化中断
 			if (rv) {
 				pr_err("Failed to setup interrupts, err %d",
 					rv);
@@ -894,7 +901,7 @@ int qdma_device_online(struct pci_dev *pdev, unsigned long dev_hndl, int reset)
 	if (rv < 0)
 		return rv;
 #endif
-	rv = qdma_device_interrupt_setup(xdev);
+	rv = qdma_device_interrupt_setup(xdev); //配置中断相关内容，和870的关系（此处所有模式都会调用）
 	if (rv < 0) {
 		pr_err("Failed to setup device interrupts");
 		return rv;
@@ -1017,7 +1024,7 @@ int qdma_device_open(const char *mod_name, struct qdma_dev_conf *conf,
 	}
 
 #ifndef __XRT__
-	rv = pci_request_regions(pdev, mod_name); //申请 PCI 设备的内存和 I/O 资源，确保设备不会被其他驱动程序占用。
+	rv = pci_request_regions(pdev, mod_name); //mod_name=DRV_MODULE_NAME 申请 PCI 设备的内存和 I/O 资源，确保设备不会被其他驱动程序占用。
 	if (rv) {
 		/* Just info, some other driver may have claimed the device. */
 		dev_info(&pdev->dev, "cannot obtain PCI resources\n");
@@ -1035,7 +1042,8 @@ int qdma_device_open(const char *mod_name, struct qdma_dev_conf *conf,
 	启用 PCI 设备并设置基本特性：
 	relaxed ordering：优化事务顺序以提高性能。
 	extended tag：支持更大的事务队列。
-	bus master：允许设备发起 DMA 传输。
+	set master： PCI 设备的总线主控（bus mastering）允许设备直接访问主存（DMA操作），
+				而无需经过 CPU 的干预。
 */
 	/* enable relaxed ordering */
 	pci_enable_relaxed_ordering(pdev);
@@ -1045,7 +1053,7 @@ int qdma_device_open(const char *mod_name, struct qdma_dev_conf *conf,
 
 	/* enable bus master capability */
 	pci_set_master(pdev);
-
+	//Jasper:dma设备ops初始化在内核是怎么初始化的，probe调用的时候直接传入pci结构体了
 	rv = pci_dma_mask_set(pdev); //设置 DMA 的掩码，确保设备支持合适的地址范围。
 	if (rv) {
 		pr_err("Failed to set the dma mask");
@@ -1064,7 +1072,7 @@ int qdma_device_open(const char *mod_name, struct qdma_dev_conf *conf,
 
 	strncpy(xdev->mod_name, mod_name, QDMA_DEV_NAME_MAXLEN - 1);
 
-	xdev_flag_set(xdev, XDEV_FLAG_OFFLINE);
+	xdev_flag_set(xdev, XDEV_FLAG_OFFLINE);	 
 	xdev_list_add(xdev);
 
 	rv = snprintf(xdev->conf.name, QDMA_DEV_NAME_MAXLEN,
@@ -1158,7 +1166,7 @@ int qdma_device_open(const char *mod_name, struct qdma_dev_conf *conf,
 		goto unmap_bars;
 	}
 #endif
-
+//Jasper:VF和PF如何使用，VF是需要新编一份吗
 #ifdef __QDMA_VF__
 	if ((conf->qdma_drv_mode != POLL_MODE) &&
 		(xdev->version_info.ip_type == QDMA_VERSAL_HARD_IP) &&
